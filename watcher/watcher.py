@@ -4,9 +4,9 @@ import pandas as pd
 from datetime import datetime
 import json
 import requests
-from plyer import notification
-import smtplib
-from email.mime.text import MIMEText
+# from plyer import notification   # ❌ disabled for now
+# import smtplib                  # ❌ disabled for now
+# from email.mime.text import MIMEText  # ❌ disabled for now
 import time
 from dotenv import load_dotenv
 
@@ -17,17 +17,22 @@ noginx_mail_id = os.getenv('NOGINX_MAIL_ID')
 noginx_mail_password = os.getenv('NOGINX_MAIL_PASSWORD')
 receiver_mail_id = os.getenv('RECEIVER_MAIL_ID')
 
+# ✅ Windows NGINX log path
+filename = r"C:\nginx-1.29.8\logs\access.log"
+
+# ❌ OLD REGEX (buggy for IP)
+# pattern = r'(?P<ip>[\d.:a-fA-F]+)...'
+
+# ✅ FIXED REGEX (proper IPv4 capture)
+pattern = r'(?P<ip>\d+\.\d+\.\d+\.\d+)\s+- - \[(?P<timestamp>[^\]]+)\]\s+"(?P<method>\w+)\s(?P<url>\S+)\s(?P<http_version>[^"]+)"\s(?P<status>\d+)\s(?P<size>\d+)\s"[^"]*"\s"(?P<user_agent>[^"]*)"'
 
 
+def encode_with_fallback(value, dict):
+    return dict.get(value, -1)
 
-filename = "/var/log/nginx/access.log"
 
-pattern = r'(?P<ip>[\d.:a-fA-F]+)\s+- - \[(?P<timestamp>[^\]]+)\]\s+"(?P<method>\w+)\s(?P<url>\S+)\s(?P<http_version>[^"]+)"\s(?P<status>\d+)\s(?P<size>\d+)\s"[^"]*"\s"(?P<user_agent>[^"]*)"'
-
-def encode_with_fallback(value,dict):
-    return dict.get(value,-1)
-
-def send_alert(df,method,path,user_agent):
+# ✅ ALERT FUNCTION (EMAIL DISABLED → TERMINAL ONLY)
+def send_alert(df, method, path, user_agent):
     ip = df['ip'].values[0]
     user_agent = user_agent.values[0]
     timestamp = df['timestamp'].values[0]
@@ -41,6 +46,13 @@ def send_alert(df,method,path,user_agent):
         f"User Agent: {user_agent}"
     )
 
+    # ✅ Terminal output
+    print("\n" + "="*50)
+    print(message)
+    print("="*50 + "\n")
+
+    # ❌ EMAIL + NOTIFICATION DISABLED (for now)
+    """
     notification.notify(
         title="🚨 Anomaly Alert!",
         message=message,
@@ -51,69 +63,121 @@ def send_alert(df,method,path,user_agent):
     )
 
     s = smtplib.SMTP('smtp.gmail.com', 587)
-
     s.starttls()
     s.login(noginx_mail_id, noginx_mail_password)
+
     msg = MIMEText(message, _charset="utf-8")
     msg['Subject'] = "🚨 noginx Anomaly Detected"
     msg['From'] = noginx_mail_id
     msg['To'] = receiver_mail_id
 
-    hi = s.sendmail(noginx_mail_id, receiver_mail_id, msg.as_string())
-    print("SMTP Response:", hi)
-
+    s.sendmail(noginx_mail_id, receiver_mail_id, msg.as_string())
     s.quit()
-
-
-
-
+    """
 
     return
 
-encoding_path = os.path.abspath(os.path.join(os.path.dirname(__file__),'..','data','encoder_mappings.json'))
+
+# ✅ NEW: Track requests per IP (for brute-force detection)
+request_tracker = {}
+
+
+# Load encoder mappings
+encoding_path = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), '..', 'data', 'encoder_mappings.json')
+)
 
 with open(encoding_path, "r") as f:
     encoder_mappings = json.load(f)
 
-with open(filename, 'r') as file:
-    file.seek(0, os.SEEK_END)  # Go to end of file
 
-    print("Watching NGINX logs for anomalies...")
+# Start watching log file
+with open(filename, 'r') as file:
+    file.seek(0, os.SEEK_END)
+
+    print("🚀 Watching NGINX logs for anomalies...\n")
+
     while True:
         line = file.readline()
+
         if not line:
             time.sleep(1)
             continue
 
         match = re.search(pattern, line)
+
         if match:
             df = pd.DataFrame([match.groupdict()])
-            df['hour_of_day'] = df['timestamp'].apply(lambda x: int(datetime.strptime(x.split()[0], "%d/%b/%Y:%H:%M:%S").hour))
+
+            # Extract hour
+            df['hour_of_day'] = df['timestamp'].apply(
+                lambda x: int(datetime.strptime(x.split()[0], "%d/%b/%Y:%H:%M:%S").hour)
+            )
+
+            # Extract path
             df['path'] = df['url'].apply(lambda x: x.split('?')[0])
 
             df['status'] = df['status'].astype(int)
             df['size'] = df['size'].astype(int)
+
             cur_method = df['method']
             cur_path = df['path']
             cur_user_agent = df['user_agent']
 
-            df['method'] = df['method'].apply(lambda x: encode_with_fallback(x, encoder_mappings['method']['mapping']))
-            df['path'] = df['path'].apply(lambda x: encode_with_fallback(x, encoder_mappings['path']['mapping']))
-            df['user_agent'] = df['user_agent'].apply(lambda x: encode_with_fallback(x, encoder_mappings['user_agent']['mapping']))
+            # 🔥 DEBUG (optional)
+            # print(df[['ip', 'status', 'path']])
+
+            # ❗ OPTIONAL: Ignore 404 (uncomment if needed)
+            """
+            if df['status'].values[0] == 404:
+                continue
+            """
+
+            # ✅ Encode features
+            df['method'] = df['method'].apply(
+                lambda x: encode_with_fallback(x, encoder_mappings['method']['mapping'])
+            )
+            df['path'] = df['path'].apply(
+                lambda x: encode_with_fallback(x, encoder_mappings['path']['mapping'])
+            )
+            df['user_agent'] = df['user_agent'].apply(
+                lambda x: encode_with_fallback(x, encoder_mappings['user_agent']['mapping'])
+            )
 
             feature_df = df[['status', 'size', 'method', 'path', 'user_agent', 'hour_of_day']]
             payload = {"feature": feature_df.iloc[0].to_dict()}
 
+            ip = df['ip'].values[0]
+
+            # ✅ NEW: Track request frequency (last 10 sec)
+            if ip not in request_tracker:
+                request_tracker[ip] = []
+
+            request_tracker[ip].append(time.time())
+
+            # Keep only last 10 seconds
+            request_tracker[ip] = [
+                t for t in request_tracker[ip] if time.time() - t < 10
+            ]
+
+            # 🚨 Brute force detection
+            if len(request_tracker[ip]) > 10:
+                print(f"🚨 Possible Brute Force Attack from {ip}")
+
             try:
                 res = requests.post(predict_one_url, json=payload)
-                is_anomaly = res.json()[0]["anomaly"]
+                result = res.json()
+
+                print("Prediction Response:", result)
+
+                is_anomaly = result[0]["anomaly"]
 
                 if is_anomaly:
                     print("🔥 Anomaly Detected")
                     send_alert(df, cur_method, cur_path, cur_user_agent)
 
             except Exception as e:
-                print("Prediction failed:", e)
+                print("❌ Prediction failed:", e)
 
         else:
-            print(" Log line did not match expected format.")
+            print("⚠️ Log line did not match expected format.")
