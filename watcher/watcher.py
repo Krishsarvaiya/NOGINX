@@ -1,237 +1,251 @@
 import os
-import re
-import pandas as pd
-from datetime import datetime
-import json
-import requests
-from pathlib import Path
-# from plyer import notification   # ❌ disabled for now
-# import smtplib                  # ❌ disabled for now
-# from email.mime.text import MIMEText  # ❌ disabled for now
+import sys
 import time
+from pathlib import Path
+
+import requests
 from dotenv import load_dotenv
 
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 load_dotenv()
-# If you start watcher from inside `watcher/`, the project-root `.env` may not be found.
-_root_env = Path(__file__).resolve().parent.parent / ".env"
+_root_env = PROJECT_ROOT / ".env"
 if _root_env.exists():
     load_dotenv(dotenv_path=str(_root_env))
 
-predict_one_url = os.getenv('PREDICT_ONE_URL')
-noginx_mail_id = os.getenv('NOGINX_MAIL_ID')
-noginx_mail_password = os.getenv('NOGINX_MAIL_PASSWORD')
-receiver_mail_id = os.getenv('RECEIVER_MAIL_ID')
+from ml.log_parser import LOG_PATTERN, parse_log_line  # noqa: E402
+from ml.threat_engine import ThreatEngine  # noqa: E402
 
-# Debug flag: set DEBUG_WATCHER=true to see extra parsing/payload logs.
+# --- Configuration ---
+NGINX_ACCESS_LOG = os.getenv("NGINX_ACCESS_LOG", r"C:\nginx-1.29.8\logs\access.log")
 DEBUG_WATCHER = os.getenv("DEBUG_WATCHER", "false").strip().lower() == "true"
-WATCHER_SCORE_THRESHOLD = float(os.getenv("WATCHER_SCORE_THRESHOLD", "0.0"))
+WATCHER_ALERT_THRESHOLD = float(os.getenv("WATCHER_ALERT_THRESHOLD", "0.45"))
+ENABLE_DESKTOP_ALERTS = os.getenv("ENABLE_DESKTOP_ALERTS", "true").strip().lower() == "true"
+ENABLE_EMAIL_ALERTS = os.getenv("ENABLE_EMAIL_ALERTS", "false").strip().lower() == "true"
 
-if not predict_one_url:
-    raise ValueError("PREDICT_ONE_URL is not set. Create/verify .env at project root.")
+API_BASE_URL = os.getenv("API_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
+INCIDENT_REPORT_URL = os.getenv("INCIDENT_REPORT_URL", f"{API_BASE_URL}/api/incidents/report")
+SERVICE_TOKEN = os.getenv("NOGINX_SERVICE_TOKEN", "")
+REPORT_TO_DASHBOARD = os.getenv("REPORT_TO_DASHBOARD", "true").strip().lower() == "true"
 
-# ✅ Windows NGINX log path (override with env var if needed)
-filename = os.getenv("NGINX_ACCESS_LOG", r"C:\nginx-1.29.8\logs\access.log")
+NOGINX_MAIL_ID = os.getenv("NOGINX_MAIL_ID")
+NOGINX_MAIL_PASSWORD = os.getenv("NOGINX_MAIL_PASSWORD")
+RECEIVER_MAIL_ID = os.getenv("RECEIVER_MAIL_ID")
 
-# ❌ OLD REGEX (buggy for IP)
-# pattern = r'(?P<ip>[\d.:a-fA-F]+)...'
+BRUTE_FORCE_WINDOW_SEC = 10
+BRUTE_FORCE_LIMIT = 10
 
-# ✅ More flexible regex (works with different nginx log formats)
-# It captures:
-# - ip
-# - timestamp
-# - method, url, http_version
-# - status, size (size can be '-' sometimes)
-# - user_agent (inside quotes)
-pattern = (
-    r'(?P<ip>\d+\.\d+\.\d+\.\d+).*?\['
-    r'(?P<timestamp>[^\]]+)'
-    r'\]\s+"(?P<method>\w+)\s(?P<url>\S+)\s(?P<http_version>[^"]+)"\s+'
-    r'(?P<status>\d+)\s(?P<size>\d+|-)'
-    r'\s"[^"]*"\s"(?P<user_agent>[^"]*)"'
-)
+request_tracker: dict[str, list[float]] = {}
+recent_alerts: dict[str, float] = {}
+ALERT_COOLDOWN_SEC = 30
+
+threat_engine = ThreatEngine()
 
 
-def encode_with_fallback(value, dict):
-    return dict.get(value, -1)
-
-
-# ✅ ALERT FUNCTION (EMAIL DISABLED → TERMINAL ONLY)
-def send_alert(df, method, path, user_agent):
-    ip = df['ip'].values[0]
-    user_agent = user_agent.values[0]
-    timestamp = df['timestamp'].values[0]
-    path = path.values[0]
-
-    message = (
-        f"🚨 Anomaly Detected!\n\n"
-        f"IP Address: {ip}\n"
-        f"Timestamp: {timestamp}\n"
-        f"Path: {path}\n"
-        f"User Agent: {user_agent}"
-    )
-
-    # ✅ Terminal output
-    print("\n" + "="*50)
-    print(message)
-    print("="*50 + "\n")
-
-    # ❌ EMAIL + NOTIFICATION DISABLED (for now)
-    """
-    notification.notify(
-        title="🚨 Anomaly Alert!",
-        message=message,
-        app_name="noginx",
-        timeout=10,
-        ticker="Anomaly detected",
-        toast=False
-    )
-
-    s = smtplib.SMTP('smtp.gmail.com', 587)
-    s.starttls()
-    s.login(noginx_mail_id, noginx_mail_password)
-
-    msg = MIMEText(message, _charset="utf-8")
-    msg['Subject'] = "🚨 noginx Anomaly Detected"
-    msg['From'] = noginx_mail_id
-    msg['To'] = receiver_mail_id
-
-    s.sendmail(noginx_mail_id, receiver_mail_id, msg.as_string())
-    s.quit()
-    """
-
-    return
-
-
-# ✅ NEW: Track requests per IP (for brute-force detection)
-request_tracker = {}
-
-
-# Load encoder mappings
-encoding_path = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), '..', 'data', 'encoder_mappings.json')
-)
-
-with open(encoding_path, "r") as f:
-    encoder_mappings = json.load(f)
-
-
-# Start watching log file
-log_path = Path(filename)
-if not log_path.exists():
-    raise FileNotFoundError(f"NGINX access log not found: {log_path}")
-
-with open(filename, 'r', encoding='utf-8', errors='ignore') as file:
-    # Jump to end so we only process new lines
-    file.seek(0, os.SEEK_END)
-
-    # Startup sanity check to confirm the regex matches some lines
+def _desktop_notify(title: str, message: str) -> None:
+    if not ENABLE_DESKTOP_ALERTS:
+        return
     try:
-        file.seek(0)
-        sample = file.readlines()[-50:]
-        matched = sum(1 for line in sample if re.search(pattern, line))
-        print(f"[startup] log_path={log_path} size_bytes={log_path.stat().st_size} parse_matches_last50={matched}/50")
-    except Exception as e:
-        print(f"[startup] could not parse sample lines: {e}")
-    file.seek(0, os.SEEK_END)
+        from plyer import notification
 
-    print("🚀 Watching NGINX logs for anomalies...\n")
+        notification.notify(
+            title=title,
+            message=message[:256],
+            app_name="NOGINX",
+            timeout=12,
+        )
+    except Exception as exc:
+        print(f"[alert] desktop notification unavailable: {exc}")
 
-    while True:
-        line = file.readline()
 
-        if not line:
-            time.sleep(1)
-            continue
+def _email_notify(subject: str, message: str) -> None:
+    if not ENABLE_EMAIL_ALERTS:
+        return
+    if not all([NOGINX_MAIL_ID, NOGINX_MAIL_PASSWORD, RECEIVER_MAIL_ID]):
+        print("[alert] email skipped — set NOGINX_MAIL_ID, NOGINX_MAIL_PASSWORD, RECEIVER_MAIL_ID")
+        return
+    try:
+        import smtplib
+        from email.mime.text import MIMEText
 
-        match = re.search(pattern, line)
+        msg = MIMEText(message, _charset="utf-8")
+        msg["Subject"] = subject
+        msg["From"] = NOGINX_MAIL_ID
+        msg["To"] = RECEIVER_MAIL_ID
 
-        if match:
-            df = pd.DataFrame([match.groupdict()])
+        with smtplib.SMTP("smtp.gmail.com", 587, timeout=10) as smtp:
+            smtp.starttls()
+            smtp.login(NOGINX_MAIL_ID, NOGINX_MAIL_PASSWORD)
+            smtp.sendmail(NOGINX_MAIL_ID, RECEIVER_MAIL_ID, msg.as_string())
+    except Exception as exc:
+        print(f"[alert] email failed: {exc}")
 
-            # Extract hour
-            df['hour_of_day'] = df['timestamp'].apply(
-                lambda x: int(datetime.strptime(x.split()[0], "%d/%b/%Y:%H:%M:%S").hour)
-            )
 
-            # Extract path
-            df['path'] = df['url'].apply(lambda x: x.split('?')[0])
+def report_to_dashboard(prediction: dict) -> None:
+    if not REPORT_TO_DASHBOARD:
+        return
+    if not SERVICE_TOKEN:
+        if DEBUG_WATCHER:
+            print("[dashboard] skipped — set NOGINX_SERVICE_TOKEN in .env")
+        return
 
-            df['status'] = df['status'].astype(int)
-            # NGINX may put '-' for size
-            df['size'] = df['size'].replace('-', 0).astype(int)
+    payload = {
+        "ip": prediction["ip"],
+        "timestamp": prediction["timestamp"],
+        "method": prediction["method"],
+        "path": prediction["path"],
+        "status": prediction["status"],
+        "threat_type": prediction["threat_type"],
+        "confidence": prediction["confidence"],
+        "severity": prediction["severity"],
+        "user_agent": prediction["user_agent"],
+        "ml_score": prediction["ml_score"],
+        "raw_line": prediction.get("raw_line"),
+        "message": prediction.get("message"),
+        "source": "watcher",
+    }
+    try:
+        response = requests.post(
+            INCIDENT_REPORT_URL,
+            json=payload,
+            headers={"X-Service-Token": SERVICE_TOKEN},
+            timeout=5,
+        )
+        if response.status_code >= 400:
+            print(f"[dashboard] report failed ({response.status_code}): {response.text[:200]}")
+        elif DEBUG_WATCHER:
+            print(f"[dashboard] incident recorded id={response.json().get('id')}")
+    except Exception as exc:
+        print(f"[dashboard] report error: {exc}")
 
-            cur_method = df['method']
-            cur_path = df['path']
-            cur_user_agent = df['user_agent']
 
-            # 🔥 DEBUG (optional)
-            # print(df[['ip', 'status', 'path']])
+def send_alert(prediction: dict) -> None:
+    alert_key = f"{prediction['ip']}:{prediction['threat_type']}:{prediction['path']}"
+    now = time.time()
+    if now - recent_alerts.get(alert_key, 0) < ALERT_COOLDOWN_SEC:
+        return
+    recent_alerts[alert_key] = now
 
-            # ❗ OPTIONAL: Ignore 404 (uncomment if needed)
-            """
-            if df['status'].values[0] == 404:
+    title = f"NOGINX — {prediction['threat_type']}"
+    message = (
+        f"Severity: {prediction['severity'].upper()} ({prediction['confidence']*100:.1f}%)\n"
+        f"IP: {prediction['ip']}\n"
+        f"Path: {prediction['path']}\n"
+        f"Status: {prediction['status']}\n"
+        f"Detail: {prediction.get('message', '')}"
+    )
+
+    print("\n" + "=" * 60)
+    print(f"🚨 {title}")
+    print(message)
+    print("=" * 60 + "\n")
+
+    _desktop_notify(title, message)
+    _email_notify(f"🚨 NOGINX Alert: {prediction['threat_type']}", message)
+    report_to_dashboard(prediction)
+
+
+def check_brute_force(ip: str) -> dict | None:
+    now = time.time()
+    if ip not in request_tracker:
+        request_tracker[ip] = []
+    request_tracker[ip].append(now)
+    request_tracker[ip] = [t for t in request_tracker[ip] if now - t < BRUTE_FORCE_WINDOW_SEC]
+
+    if len(request_tracker[ip]) > BRUTE_FORCE_LIMIT:
+        return {
+            "threat_type": "Brute Force / Rate Abuse",
+            "confidence": 0.82,
+            "severity": "high",
+            "ip": ip,
+            "timestamp": "",
+            "method": "MULTI",
+            "path": "/",
+            "url": "/",
+            "status": 0,
+            "user_agent": "watcher-rate-detector",
+            "ml_anomaly": True,
+            "ml_score": 0.0,
+            "rule_matched": True,
+            "raw_line": "",
+            "message": (
+                f"IP {ip} sent {len(request_tracker[ip])} requests in "
+                f"{BRUTE_FORCE_WINDOW_SEC}s — possible brute force or flooding."
+            ),
+            "referer": "-",
+            "source": "watcher",
+        }
+    return None
+
+
+def process_line(line: str) -> None:
+    row = parse_log_line(line)
+    if not row:
+        if DEBUG_WATCHER:
+            print("⚠️  Unparsed log line")
+        return
+
+    ip = row["ip"]
+    print(
+        f"[traffic] {ip} {row['method']} {row['path']} "
+        f"→ {row['status']} ({row.get('referer', '-')[:40]})"
+    )
+
+    brute = check_brute_force(ip)
+    if brute:
+        send_alert(brute)
+
+    prediction = threat_engine.analyze_entry(row).to_dict()
+
+    if DEBUG_WATCHER:
+        print(
+            f"[analysis] {prediction['threat_type']} "
+            f"conf={prediction['confidence']:.2f} ml={prediction['ml_score']:.4f}"
+        )
+
+    if prediction["threat_type"] != "Benign" and prediction["confidence"] >= WATCHER_ALERT_THRESHOLD:
+        send_alert(prediction)
+    elif prediction["ml_anomaly"] and prediction["confidence"] >= WATCHER_ALERT_THRESHOLD:
+        send_alert(prediction)
+
+
+def main() -> None:
+    log_path = Path(NGINX_ACCESS_LOG)
+    if not log_path.exists():
+        raise FileNotFoundError(
+            f"NGINX access log not found: {log_path}\n"
+            "Set NGINX_ACCESS_LOG in .env. Note: only traffic routed through NGINX is logged."
+        )
+
+    print("🚀 NOGINX Live Watcher")
+    print(f"   log file     : {log_path}")
+    print(f"   alert thresh : {WATCHER_ALERT_THRESHOLD}")
+    print(f"   dashboard    : {'ON' if REPORT_TO_DASHBOARD and SERVICE_TOKEN else 'OFF (set NOGINX_SERVICE_TOKEN)'}")
+    print(f"   desktop alert: {'ON' if ENABLE_DESKTOP_ALERTS else 'OFF'}")
+    print(f"   email alert  : {'ON' if ENABLE_EMAIL_ALERTS else 'OFF'}")
+    print()
+
+    with open(log_path, "r", encoding="utf-8", errors="ignore") as handle:
+        try:
+            handle.seek(0)
+            sample = handle.readlines()[-50:]
+            matched = sum(1 for line in sample if LOG_PATTERN.search(line))
+            print(f"[startup] parse_matches_last50={matched}/50")
+        except Exception as exc:
+            print(f"[startup] sample parse warning: {exc}")
+
+        handle.seek(0, os.SEEK_END)
+        print("Watching for new log entries...\n")
+
+        while True:
+            line = handle.readline()
+            if not line:
+                time.sleep(0.5)
                 continue
-            """
+            process_line(line)
 
-            # ✅ Encode features
-            df['method'] = df['method'].apply(
-                lambda x: encode_with_fallback(x, encoder_mappings['method']['mapping'])
-            )
-            df['path'] = df['path'].apply(
-                lambda x: encode_with_fallback(x, encoder_mappings['path']['mapping'])
-            )
-            df['user_agent'] = df['user_agent'].apply(
-                lambda x: encode_with_fallback(x, encoder_mappings['user_agent']['mapping'])
-            )
 
-            feature_df = df[['status', 'size', 'method', 'path', 'user_agent', 'hour_of_day']]
-            payload = {"feature": feature_df.iloc[0].to_dict()}
-
-            ip = df['ip'].values[0]
-
-            # ✅ NEW: Track request frequency (last 10 sec)
-            if ip not in request_tracker:
-                request_tracker[ip] = []
-
-            request_tracker[ip].append(time.time())
-
-            # Keep only last 10 seconds
-            request_tracker[ip] = [
-                t for t in request_tracker[ip] if time.time() - t < 10
-            ]
-
-            # 🚨 Brute force detection
-            if len(request_tracker[ip]) > 10:
-                print(f"🚨 Possible Brute Force Attack from {ip}")
-
-            try:
-                res = requests.post(predict_one_url, json=payload, timeout=5)
-                result = res.json()
-
-                print("Prediction Response:", result)
-
-                model_anomaly = bool(result[0].get("anomaly", False))
-                score = result[0].get("score")
-                score_anomaly = (score is not None) and (float(score) < WATCHER_SCORE_THRESHOLD)
-                is_anomaly = model_anomaly or score_anomaly
-
-                if score is not None:
-                    print(
-                        f"[score] value={float(score):.6f}, "
-                        f"watcher_threshold={WATCHER_SCORE_THRESHOLD:.6f}"
-                    )
-
-                if is_anomaly:
-                    print("🔥 Anomaly Detected")
-                    send_alert(df, cur_method, cur_path, cur_user_agent)
-                elif DEBUG_WATCHER:
-                    print(f"[debug] normal prediction ip={ip} payload={payload}")
-
-            except Exception as e:
-                print("❌ Prediction failed:", e)
-                if DEBUG_WATCHER:
-                    print(f"[debug] predict_one_url={predict_one_url} payload={payload}")
-
-        else:
-            if DEBUG_WATCHER:
-                print("⚠️ Log line did not match expected format.")
+if __name__ == "__main__":
+    main()
