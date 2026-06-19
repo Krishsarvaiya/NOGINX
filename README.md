@@ -1,73 +1,111 @@
 # noginx
-> Real-time NGINX anomaly detection — watches your logs, thinks with ML, screams when something's wrong.
+> AI/ML-powered NGINX log security platform — detect anomalies, classify cyber threats, and monitor incidents from a live dashboard.
 
 [Demo Video](https://github.com/Krishsarvaiya/NOGINX)
 
 ---
 
-## What's happening under the hood
+## Features
 
-Every line that hits your NGINX access log gets scored by an Isolation Forest model in real time. Normal request? Ignored. Anomaly? You get a push notification and an email with full context — before you've even had a chance to check your dashboard.
+- **Ensemble threat engine** — Isolation Forest + 15+ cybersecurity rules
+- **Insecurity detection** — HTTP (non-HTTPS), insecure referers, credentials in URL, login over HTTP
+- **Live watcher** — desktop alerts, email alerts, dashboard reporting
+- **Multi-page dashboard** — scan, history, incidents, live monitor, profile
+- **JWT auth** + service token for watcher → dashboard integration
 
 ---
 
-## Get up and running
-
-**Prerequisites:** NGINX installed, logs at `/var/log/nginx/access.log`
+## Quick start
 
 ```bash
-# 1. Set up the environment
-python3 -m venv venv && pip install -r requirements.txt
+python -m venv venv
+venv\Scripts\activate
+pip install -r requirements.txt
+```
 
-# 2. Create .env at project root
-PREDICT_ONE_URL      = "http://127.0.0.1:8000/predict_one"
-NOGINX_MAIL_ID       = "you@gmail.com"
-NOGINX_MAIL_PASSWORD = "xxxx xxxx xxxx xxxx"   # Gmail App Password (Settings → 2FA → App passwords)
-RECEIVER_MAIL_ID     = "alerts@you.com"
+### `.env` (project root)
 
-# 3. Start the backend (terminal 1)
-cd fastapi_backend && uvicorn api_server:app --reload
+```env
+# API
+NOGINX_SECRET_KEY=change-me-in-production
+ANOMALY_SCORE_THRESHOLD=0.0
 
-# 4. Start the watcher (terminal 2)
-cd watcher && python3 watcher.py
+# Watcher → Dashboard
+NOGINX_SERVICE_TOKEN=your-long-random-token
+NOGINX_SERVICE_USER=watcher
+API_BASE_URL=http://127.0.0.1:8000
+NGINX_ACCESS_LOG=C:\nginx-1.29.8\logs\access.log
+WATCHER_ALERT_THRESHOLD=0.45
+ENABLE_DESKTOP_ALERTS=true
+ENABLE_EMAIL_ALERTS=false
+
+# Email (optional)
+NOGINX_MAIL_ID=you@gmail.com
+NOGINX_MAIL_PASSWORD=app-password
+RECEIVER_MAIL_ID=alerts@you.com
+```
+
+### Run
+
+```bash
+# Terminal 1 — API + Dashboard
+cd fastapi_backend
+uvicorn app:app --reload
+
+# Terminal 2 — Live watcher (optional)
+cd watcher
+python watcher.py
+```
+
+Open: **http://127.0.0.1:8000/ui/login.html**
+
+---
+
+## Dashboard pages
+
+| Page | URL | Purpose |
+|------|-----|---------|
+| Overview | `/ui/dashboard.html` | Stats & quick actions |
+| Log Scanner | `/ui/scan.html` | Upload & analyze log files |
+| Scan History | `/ui/history.html` | Past scans with details |
+| Incidents | `/ui/incidents.html` | All threats (watcher + scans) |
+| Live Monitor | `/ui/live.html` | Watcher setup & live alerts |
+| Profile | `/ui/profile.html` | Account & activity (top-right icon) |
+
+---
+
+## Important: why watcher may show no alerts
+
+The watcher only sees traffic in your **NGINX access.log**. If you browse insecure HTTP websites directly in Chrome/Firefox, those requests **do not** go through NGINX unless you configure it as a reverse proxy.
+
+To monitor browsing:
+1. Route traffic through NGINX, or
+2. Upload exported logs via **Log Scanner**, or
+3. Point `NGINX_ACCESS_LOG` at any NGINX-format log file
+
+Every parsed request now prints `[traffic]` in the watcher terminal so you can confirm logs are flowing.
+
+---
+
+## Retrain on your logs
+
+```bash
+python parse_logs.py      # data/nginx.log → nginx_logs.csv
+python train_model.py     # → model_retrained.pkl + encoders
 ```
 
 ---
 
-## API
+## Detection rules (examples)
 
-Two endpoints, same idea — send log features, get an anomaly verdict.
-
-| Endpoint | Use |
-|---|---|
-| `POST /predict` | Score a batch of log entries |
-| `POST /predict_one` | Score a single entry (used by the watcher) |
-
-**Payload:** `status`, `size`, `method`, `path`, `user_agent`, `hour_of_day`  
-**Response:** `{ "anomaly": true/false }`
-
----
-
-## The model
-
-Trained on the [Elastic NGINX logs dataset](https://github.com/elastic/examples/blob/master/Common%20Data%20Formats/nginx_logs/README.md) using **Isolation Forest** — an algorithm that learns what "normal" traffic looks like and flags deviations. Saved to `data/model.pkl`.
-
-Features are label-encoded strings → integers (see `data/encoder_mappings.json`).
-
----
-
-## Retrain on your own traffic
-
-For production use, train the model on your company's actual log patterns:
-
-```bash
-# Drop your logs at data/nginx.log, then:
-python3 parse_logs.py    # raw logs → CSV
-python3 process_csv.py   # CSV → encoded features
-python3 train_model.py   # features → model.pkl
-```
-
-Tweak the Isolation Forest hyperparameters or add new feature engineering in `process_csv.py` to match your traffic profile.
+| Threat | Trigger |
+|--------|---------|
+| Insecure HTTP Request | URL starts with `http://` |
+| Insecure HTTP Referer | Referer header uses HTTP |
+| Insecure Login / Auth Page | Login path over HTTP |
+| Credentials in URL | `password=`, `token=` in query string |
+| Brute Force | 10+ requests from same IP in 10 seconds |
+| ML Traffic Anomaly | Isolation Forest outlier score |
 
 ---
 
@@ -75,22 +113,15 @@ Tweak the Isolation Forest hyperparameters or add new feature engineering in `pr
 
 ```
 noginx/
-├── data/
-│   ├── model.pkl
-│   ├── nginx_logs.csv
-│   ├── nginx.log
-│   └── encoder_mappings.json
-├── fastapi_backend/
-│   └── api_server.py
-├── watcher/
-│   └── watcher.py
+├── ml/                   # Threat engine + log parser
+├── fastapi_backend/      # API, auth, database
+├── frontend/             # Multi-page UI
+├── watcher/              # Live log monitor
 ├── parse_logs.py
-├── process_csv.py
 ├── train_model.py
-├── requirements.txt
-└── .env
+└── data/                 # Models, logs, DB (gitignored)
 ```
 
 ---
 
-Open to contributions — feel free to open a PR or file an issue on [GitHub](https://github.com/Krishsarvaiya/NOGINX).
+Contributions welcome on [GitHub](https://github.com/Krishsarvaiya/NOGINX).
