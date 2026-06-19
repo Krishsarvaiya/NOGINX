@@ -11,10 +11,11 @@ class Features(BaseModel):
 class Feature(BaseModel):
     feature: Dict[str,int]
 
-model_path = os.path.join(os.path.dirname(__file__),'..','data','model.pkl')
+model_path = os.path.join(os.path.dirname(__file__),'..','data','model_retrained.pkl')
 model_path = os.path.abspath(model_path)
 
 EXPECTED_FEATURES = ["status", "size", "method", "path", "user_agent", "hour_of_day"]
+ANOMALY_SCORE_THRESHOLD = float(os.getenv("ANOMALY_SCORE_THRESHOLD", "0.0"))
 
 
 model = joblib.load(model_path)
@@ -25,7 +26,7 @@ async def root():
     return {"message":"server is running live"}
 
 @app.post("/predict")
-async def predict(input: Features):
+async def predict_batch(input: Features):
     df = pd.DataFrame(input.features)
     df = df.astype("int")
     df = df[EXPECTED_FEATURES]
@@ -37,12 +38,21 @@ async def predict(input: Features):
     return results
 
 @app.post("/predict_one")
-async def predict(input: Feature):
+async def predict_one(input: Feature):
     df = pd.DataFrame([input.feature])
     df = df.astype("int")
     df = df[EXPECTED_FEATURES]
     preds = model.predict(df)
-    results = [{"anomaly": bool(pred == -1)} for pred in preds]
+    scores = model.decision_function(df)
+    results = [
+        {
+            "anomaly": bool(pred == -1 or score < ANOMALY_SCORE_THRESHOLD),
+            "prediction": int(pred),
+            "score": float(score),
+            "threshold": float(ANOMALY_SCORE_THRESHOLD),
+        }
+        for pred, score in zip(preds, scores)
+    ]
 
     print(results)
 

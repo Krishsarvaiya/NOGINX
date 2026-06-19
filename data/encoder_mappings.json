@@ -148,6 +148,7 @@
             "dnf/0.5.4",
             "libwww-perl/5.836",
             "libwww-perl/6.05",
+            "nan",
             "python-requests/2.0.0 CPython/2.6.6 Linux/2.6.32-358.18.1.el6.x86_64",
             "python-requests/2.2.1 CPython/2.6.6 Linux/2.6.32-431.el6.x86_64",
             "urlgrabber/3.1.0 yum/3.2.19",
@@ -156,8 +157,7 @@
             "urlgrabber/3.10.1 yum/3.4.3",
             "urlgrabber/3.9.1 yum/3.2.27",
             "urlgrabber/3.9.1 yum/3.2.29",
-            "urlgrabber/3.9.1 yum/3.4.3",
-            NaN
+            "urlgrabber/3.9.1 yum/3.4.3"
         ],
         "mapping": {
             "-": 0,
@@ -285,16 +285,16 @@
             "dnf/0.5.4": 122,
             "libwww-perl/5.836": 123,
             "libwww-perl/6.05": 124,
-            "python-requests/2.0.0 CPython/2.6.6 Linux/2.6.32-358.18.1.el6.x86_64": 125,
-            "python-requests/2.2.1 CPython/2.6.6 Linux/2.6.32-431.el6.x86_64": 126,
-            "urlgrabber/3.1.0 yum/3.2.19": 127,
-            "urlgrabber/3.1.0 yum/3.2.22": 128,
-            "urlgrabber/3.10 yum/3.4.3": 129,
-            "urlgrabber/3.10.1 yum/3.4.3": 130,
-            "urlgrabber/3.9.1 yum/3.2.27": 131,
-            "urlgrabber/3.9.1 yum/3.2.29": 132,
-            "urlgrabber/3.9.1 yum/3.4.3": 133,
-            "NaN": 134
+            "nan": 125,
+            "python-requests/2.0.0 CPython/2.6.6 Linux/2.6.32-358.18.1.el6.x86_64": 126,
+            "python-requests/2.2.1 CPython/2.6.6 Linux/2.6.32-431.el6.x86_64": 127,
+            "urlgrabber/3.1.0 yum/3.2.19": 128,
+            "urlgrabber/3.1.0 yum/3.2.22": 129,
+            "urlgrabber/3.10 yum/3.4.3": 130,
+            "urlgrabber/3.10.1 yum/3.4.3": 131,
+            "urlgrabber/3.9.1 yum/3.2.27": 132,
+            "urlgrabber/3.9.1 yum/3.2.29": 133,
+            "urlgrabber/3.9.1 yum/3.4.3": 134
         }
     }
 }

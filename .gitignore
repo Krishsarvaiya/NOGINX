@@ -37,4 +37,29 @@ MANIFEST
 
 # Installer logs
 pip-log.txt
-pip-delete-this-directory.txt
+pip-delete-this-directory.txtd a t a / f e a t u r e s . c s v 
+ 
+
+# Virtual Environment
+venv/
+.venv/
+
+# Python
+__pycache__/
+*.py[cod]
+
+# Ignore only large/generated files
+data/features.csv
+
+# Ignore logs created while running
+*.log
+
+# Ignore training checkpoints if needed
+*.h5
+*.pt
+
+# Keep project datasets and models
+!data/
+!data/*.csv
+!data/*.json
+!data/*.pkl

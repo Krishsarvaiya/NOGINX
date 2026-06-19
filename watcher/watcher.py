@@ -4,6 +4,7 @@ import pandas as pd
 from datetime import datetime
 import json
 import requests
+from pathlib import Path
 # from plyer import notification   # ❌ disabled for now
 # import smtplib                  # ❌ disabled for now
 # from email.mime.text import MIMEText  # ❌ disabled for now
@@ -11,20 +12,43 @@ import time
 from dotenv import load_dotenv
 
 load_dotenv()
+# If you start watcher from inside `watcher/`, the project-root `.env` may not be found.
+_root_env = Path(__file__).resolve().parent.parent / ".env"
+if _root_env.exists():
+    load_dotenv(dotenv_path=str(_root_env))
 
 predict_one_url = os.getenv('PREDICT_ONE_URL')
 noginx_mail_id = os.getenv('NOGINX_MAIL_ID')
 noginx_mail_password = os.getenv('NOGINX_MAIL_PASSWORD')
 receiver_mail_id = os.getenv('RECEIVER_MAIL_ID')
 
-# ✅ Windows NGINX log path
-filename = r"C:\nginx-1.29.8\logs\access.log"
+# Debug flag: set DEBUG_WATCHER=true to see extra parsing/payload logs.
+DEBUG_WATCHER = os.getenv("DEBUG_WATCHER", "false").strip().lower() == "true"
+WATCHER_SCORE_THRESHOLD = float(os.getenv("WATCHER_SCORE_THRESHOLD", "0.0"))
+
+if not predict_one_url:
+    raise ValueError("PREDICT_ONE_URL is not set. Create/verify .env at project root.")
+
+# ✅ Windows NGINX log path (override with env var if needed)
+filename = os.getenv("NGINX_ACCESS_LOG", r"C:\nginx-1.29.8\logs\access.log")
 
 # ❌ OLD REGEX (buggy for IP)
 # pattern = r'(?P<ip>[\d.:a-fA-F]+)...'
 
-# ✅ FIXED REGEX (proper IPv4 capture)
-pattern = r'(?P<ip>\d+\.\d+\.\d+\.\d+)\s+- - \[(?P<timestamp>[^\]]+)\]\s+"(?P<method>\w+)\s(?P<url>\S+)\s(?P<http_version>[^"]+)"\s(?P<status>\d+)\s(?P<size>\d+)\s"[^"]*"\s"(?P<user_agent>[^"]*)"'
+# ✅ More flexible regex (works with different nginx log formats)
+# It captures:
+# - ip
+# - timestamp
+# - method, url, http_version
+# - status, size (size can be '-' sometimes)
+# - user_agent (inside quotes)
+pattern = (
+    r'(?P<ip>\d+\.\d+\.\d+\.\d+).*?\['
+    r'(?P<timestamp>[^\]]+)'
+    r'\]\s+"(?P<method>\w+)\s(?P<url>\S+)\s(?P<http_version>[^"]+)"\s+'
+    r'(?P<status>\d+)\s(?P<size>\d+|-)'
+    r'\s"[^"]*"\s"(?P<user_agent>[^"]*)"'
+)
 
 
 def encode_with_fallback(value, dict):
@@ -92,7 +116,22 @@ with open(encoding_path, "r") as f:
 
 
 # Start watching log file
-with open(filename, 'r') as file:
+log_path = Path(filename)
+if not log_path.exists():
+    raise FileNotFoundError(f"NGINX access log not found: {log_path}")
+
+with open(filename, 'r', encoding='utf-8', errors='ignore') as file:
+    # Jump to end so we only process new lines
+    file.seek(0, os.SEEK_END)
+
+    # Startup sanity check to confirm the regex matches some lines
+    try:
+        file.seek(0)
+        sample = file.readlines()[-50:]
+        matched = sum(1 for line in sample if re.search(pattern, line))
+        print(f"[startup] log_path={log_path} size_bytes={log_path.stat().st_size} parse_matches_last50={matched}/50")
+    except Exception as e:
+        print(f"[startup] could not parse sample lines: {e}")
     file.seek(0, os.SEEK_END)
 
     print("🚀 Watching NGINX logs for anomalies...\n")
@@ -118,7 +157,8 @@ with open(filename, 'r') as file:
             df['path'] = df['url'].apply(lambda x: x.split('?')[0])
 
             df['status'] = df['status'].astype(int)
-            df['size'] = df['size'].astype(int)
+            # NGINX may put '-' for size
+            df['size'] = df['size'].replace('-', 0).astype(int)
 
             cur_method = df['method']
             cur_path = df['path']
@@ -165,19 +205,33 @@ with open(filename, 'r') as file:
                 print(f"🚨 Possible Brute Force Attack from {ip}")
 
             try:
-                res = requests.post(predict_one_url, json=payload)
+                res = requests.post(predict_one_url, json=payload, timeout=5)
                 result = res.json()
 
                 print("Prediction Response:", result)
 
-                is_anomaly = result[0]["anomaly"]
+                model_anomaly = bool(result[0].get("anomaly", False))
+                score = result[0].get("score")
+                score_anomaly = (score is not None) and (float(score) < WATCHER_SCORE_THRESHOLD)
+                is_anomaly = model_anomaly or score_anomaly
+
+                if score is not None:
+                    print(
+                        f"[score] value={float(score):.6f}, "
+                        f"watcher_threshold={WATCHER_SCORE_THRESHOLD:.6f}"
+                    )
 
                 if is_anomaly:
                     print("🔥 Anomaly Detected")
                     send_alert(df, cur_method, cur_path, cur_user_agent)
+                elif DEBUG_WATCHER:
+                    print(f"[debug] normal prediction ip={ip} payload={payload}")
 
             except Exception as e:
                 print("❌ Prediction failed:", e)
+                if DEBUG_WATCHER:
+                    print(f"[debug] predict_one_url={predict_one_url} payload={payload}")
 
         else:
-            print("⚠️ Log line did not match expected format.")
+            if DEBUG_WATCHER:
+                print("⚠️ Log line did not match expected format.")
