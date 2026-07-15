@@ -1,0 +1,62 @@
+# NGINX reverse-proxy config template for the demo site (Browser -> NGINX -> Flask).
+#
+# Not meant to be edited by hand and used directly -- placeholders below
+# ({{NGINX_PORT}}, {{FLASK_PORT}}, {{NGINX_ACCESS_LOG_PATH}}) are filled
+# in by scripts/generate_nginx_conf.py from core/config.py, so the port
+# numbers and log path only ever need to change in one place. Re-run
+# that script (then `nginx -s reload`) any time FLASK_PORT/NGINX_PORT/
+# NGINX_ACCESS_LOG_PATH change.
+#
+# The custom log_format below is deliberately NOT NGINX's default
+# combined format: pipe-delimited, fixed 4-field order
+# ($log_client_ip|$time_local|$request|$status) so
+# core.parsing.adapters.nginx_row_from_line can parse it with a single
+# split("|", 3) -- no regex-heavy combined-log-format parsing needed,
+# and it maps 1:1 onto the same IP/Time/URL/Status shape the CSV path
+# already produces.
+#
+# $log_client_ip (defined by the map below) is the inbound
+# X-Forwarded-For a client sent, falling back to $remote_addr when
+# absent -- the same "honor X-Forwarded-For" convention site/app.py's
+# _client_ip() already uses for CSV mode (see its docstring), so
+# demo/simulate_*.py's spoofed attacker IPs keep working identically in
+# NGINX mode instead of every local demo request collapsing onto
+# $remote_addr (always 127.0.0.1 for local traffic) and merging what
+# should be separate per-attacker sessions into one. This reads
+# $http_x_forwarded_for directly (the header as the client sent it),
+# not $proxy_add_x_forwarded_for (which has NGINX's own hop already
+# appended for the upstream) -- so it's a single clean IP, never a
+# comma-separated chain, with no parsing needed on the Python side.
+
+worker_processes 1;
+
+events {
+    worker_connections 1024;
+}
+
+http {
+    include       mime.types;
+    default_type  application/octet-stream;
+    sendfile      on;
+
+    map $http_x_forwarded_for $log_client_ip {
+        default $http_x_forwarded_for;
+        ""      $remote_addr;
+    }
+
+    log_format anomaly_fmt '$log_client_ip|$time_local|$request|$status';
+    access_log "{{NGINX_ACCESS_LOG_PATH}}" anomaly_fmt;
+
+    server {
+        listen {{NGINX_PORT}};
+        server_name localhost;
+
+        location / {
+            proxy_pass http://127.0.0.1:{{FLASK_PORT}};
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+    }
+}
