@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{{ college }}{% endblock %}</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="brand">
+      <span class="brand-mark">MSC</span>
+      <span class="brand-name">{{ college }}</span>
+    </div>
+    <button class="nav-toggle" id="navToggle" aria-label="Toggle navigation">&#9776;</button>
+    <nav class="site-nav" id="siteNav">
+      <a href="/">Home</a>
+      <a href="/about">About</a>
+      <a href="/admissions">Admissions</a>
+      <a href="/departments">Departments</a>
+      <a href="/faculty">Faculty</a>
+      <a href="/library">Library</a>
+      <a href="/placements">Placements</a>
+      <a href="/results">Results</a>
+      <a href="/downloads">Downloads</a>
+      <a href="/contact">Contact</a>
+      <a href="/login" class="nav-cta">Student Login</a>
+    </nav>
+  </header>
+
+  <main class="site-main">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="site-footer">
+    <p>&copy; 2026 {{ college }}. Demo website for anomaly-detection testing only -- not a real institution.</p>
+  </footer>
+
+  <script src="/static/js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}{{ college }} — Placements{% endblock %}
+{% block content %}
+<section class="section">
+  <h1>Placement Records</h1>
+  <table class="data-table">
+    <tr><th>Year</th><th>Company</th><th>Students Placed</th><th>Avg. Package (LPA)</th></tr>
+    {% for p in placements %}
+    <tr>
+      <td>{{ p.year }}</td>
+      <td>{{ p.company }}</td>
+      <td>{{ p.students_placed }}</td>
+      <td>{{ p.avg_package_lpa }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</section>
+{% endblock %}

@@ -1,0 +1,8 @@
+2026/07/13 23:15:31 [notice] 23716#13336: signal process started
+2026/07/13 23:21:30 [notice] 23308#25984: signal process started
+2026/07/13 23:35:27 [error] 9620#20520: *1 connect() failed (10061: No connection could be made because the target machine actively refused it) while connecting to upstream, client: 127.0.0.1, server: localhost, request: "GET / HTTP/1.1", upstream: "http://127.0.0.1:5000/", host: "localhost"
+2026/07/13 23:35:29 [error] 9620#20520: *1 connect() failed (10061: No connection could be made because the target machine actively refused it) while connecting to upstream, client: 127.0.0.1, server: localhost, request: "GET /favicon.ico HTTP/1.1", upstream: "http://127.0.0.1:5000/favicon.ico", host: "localhost", referrer: "http://localhost/"
+2026/07/14 00:12:58 [notice] 6180#12024: signal process started
+2026/07/15 20:08:25 [notice] 7972#11588: signal process started
+2026/07/15 20:55:17 [error] 25824#24708: *1 connect() failed (10061: No connection could be made because the target machine actively refused it) while connecting to upstream, client: 127.0.0.1, server: localhost, request: "GET / HTTP/1.1", upstream: "http://127.0.0.1:5000/", host: "localhost"
+2026/07/15 20:55:19 [error] 25824#24708: *1 connect() failed (10061: No connection could be made because the target machine actively refused it) while connecting to upstream, client: 127.0.0.1, server: localhost, request: "GET /favicon.ico HTTP/1.1", upstream: "http://127.0.0.1:5000/favicon.ico", host: "localhost", referrer: "http://localhost/"

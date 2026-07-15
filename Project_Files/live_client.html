@@ -1,0 +1,77 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Live Log Analyzer</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 20px }
+      pre { background:#f4f4f4; padding:10px }
+    </style>
+  </head>
+  <body>
+    <h2>Live Log Analyzer</h2>
+    <div id="status">Connecting...</div>
+    <h3>Summary</h3>
+    <div id="summary"></div>
+
+    <h3>Top IPs</h3>
+    <pre id="ips"></pre>
+
+    <h3>Top Endpoints</h3>
+    <pre id="endpoints"></pre>
+
+    <h3>Status Codes</h3>
+    <pre id="status_counts"></pre>
+
+    <script>
+      const status = document.getElementById('status');
+      const summary = document.getElementById('summary');
+      const ips = document.getElementById('ips');
+      const endpoints = document.getElementById('endpoints');
+      const status_counts = document.getElementById('status_counts');
+      const lastRaw = document.createElement('pre');
+      document.body.appendChild(lastRaw);
+
+      const hosts = ['127.0.0.1', 'localhost'];
+
+      let ws = null;
+      function connectNext(index=0) {
+        if (index >= hosts.length) {
+          status.textContent = 'Disconnected (no hosts)';
+          return;
+        }
+        const uri = `ws://${hosts[index]}:8765`;
+        status.textContent = 'Connecting to ' + uri + ' ...';
+        try {
+          ws = new WebSocket(uri);
+        } catch(e) {
+          console.error(e);
+          connectNext(index+1);
+          return;
+        }
+
+        const tidyReconnect = () => setTimeout(()=>connectNext((index+1)%hosts.length), 1000);
+
+        ws.onopen = () => { status.textContent = 'Connected to ' + uri; };
+        ws.onclose = () => { status.textContent = 'Disconnected'; tidyReconnect(); };
+        ws.onerror = (e) => { status.textContent = 'Error'; console.error(e); tidyReconnect(); };
+
+        ws.onmessage = (ev) => {
+          try {
+            lastRaw.textContent = ev.data;
+            const msg = JSON.parse(ev.data);
+            if (msg.type === 'stats') {
+              const d = msg.data;
+              summary.textContent = 'Total records: ' + d.total;
+              ips.textContent = d.top_ips.map(x=>x[0]+': '+x[1]).join('\n');
+              endpoints.textContent = d.top_endpoints.map(x=>x[0]+': '+x[1]).join('\n');
+              status_counts.textContent = d.status_counts.map(x=>x[0]+': '+x[1]).join('\n');
+            }
+          } catch(e) { console.error(e); }
+        };
+      }
+
+      connectNext(0);
+    </script>
+  </body>
+</html>

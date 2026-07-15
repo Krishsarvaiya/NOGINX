@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}{{ college }} — Results{% endblock %}
+{% block content %}
+<section class="section">
+  <h1>Student Results</h1>
+  <p>Enter your roll number to view your latest semester result.</p>
+  <form class="search-form" action="/results" method="get">
+    <input type="text" name="roll_no" placeholder="e.g. CS2021001" value="{{ roll_no }}">
+    <button type="submit" class="btn">Search</button>
+  </form>
+
+  {% if searched %}
+    {% if record %}
+    <table class="data-table">
+      <tr><th>Roll No.</th><td>{{ roll_no }}</td></tr>
+      <tr><th>Name</th><td>{{ record.name }}</td></tr>
+      <tr><th>Course</th><td>{{ record.course }}</td></tr>
+      <tr><th>Semester</th><td>{{ record.semester }}</td></tr>
+      <tr><th>GPA</th><td>{{ record.gpa }}</td></tr>
+    </table>
+    {% else %}
+    <p class="notice">No result found for roll number "{{ roll_no }}".</p>
+    {% endif %}
+  {% endif %}
+</section>
+{% endblock %}

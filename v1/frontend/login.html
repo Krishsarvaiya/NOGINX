@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NOGINX — Sign In</title>
+  <link rel="stylesheet" href="/ui/css/style.css" />
+</head>
+<body>
+  <div class="bg-grid"></div>
+  <main class="auth-page">
+    <section class="auth-shell">
+      <div class="auth-brand">
+        <div class="logo"><span class="logo-icon">🛡</span> NOGINX</div>
+        <h1>AI-Powered Web Log Security</h1>
+        <p>Detect anomalies, classify threats, and monitor NGINX access logs with machine learning and cybersecurity heuristics.</p>
+        <ul class="feature-list">
+          <li>Isolation Forest anomaly detection</li>
+          <li>SQLi, XSS, path traversal rule engine</li>
+          <li>Log upload with highest-confidence predictions</li>
+          <li>Real-time security incident dashboard</li>
+        </ul>
+      </div>
+      <div class="auth-panel">
+        <h2>Sign in</h2>
+        <p class="muted">Access your security operations dashboard</p>
+        <div id="alert" class="alert"></div>
+        <form id="loginForm" class="form">
+          <label>Username
+            <input id="username" type="text" autocomplete="username" required />
+          </label>
+          <label>Password
+            <input id="password" type="password" autocomplete="current-password" required />
+          </label>
+          <button class="btn btn-primary" type="submit">Sign In</button>
+        </form>
+        <p class="auth-footer">No account? <a href="/ui/signup.html">Create one</a></p>
+      </div>
+    </section>
+  </main>
+  <script src="/ui/js/api.js"></script>
+  <script src="/ui/js/auth.js"></script>
+</body>
+</html>

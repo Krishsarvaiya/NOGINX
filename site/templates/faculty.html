@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}{{ college }} — Faculty{% endblock %}
+{% block content %}
+<section class="section">
+  <h1>Faculty</h1>
+  <table class="data-table">
+    <tr><th>Name</th><th>Department</th><th>Designation</th><th>Email</th></tr>
+    {% for f in faculty %}
+    <tr>
+      <td>{{ f.name }}</td>
+      <td>{{ f.department }}</td>
+      <td>{{ f.designation }}</td>
+      <td>{{ f.email }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</section>
+{% endblock %}

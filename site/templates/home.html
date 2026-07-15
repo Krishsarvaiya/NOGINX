@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}{{ college }} — Home{% endblock %}
+{% block content %}
+<section class="hero">
+  <h1>Welcome to {{ college }}</h1>
+  <p>Shaping engineers, managers, and leaders since 1998.</p>
+  <a class="btn" href="/admissions">Apply for Admissions</a>
+</section>
+
+<section class="card-grid">
+  <div class="card">
+    <h3>5</h3>
+    <p>Departments</p>
+  </div>
+  <div class="card">
+    <h3>7</h3>
+    <p>Faculty Members</p>
+  </div>
+  <div class="card">
+    <h3>92%</h3>
+    <p>Placement Rate</p>
+  </div>
+  <div class="card">
+    <h3>28 yrs</h3>
+    <p>Of Academic Excellence</p>
+  </div>
+</section>
+
+<section class="section">
+  <h2>Latest Announcements</h2>
+  <ul class="announcement-list">
+    <li>Admissions for the 2026-27 academic year are now open. <a href="/admissions">Learn more</a>.</li>
+    <li>Semester 6 results have been published. <a href="/results">Check your result</a>.</li>
+    <li>Placement drive with Infotech Solutions scheduled next month. <a href="/placements">View placement records</a>.</li>
+  </ul>
+</section>
+{% endblock %}

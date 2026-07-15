@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}{{ college }} — Departments{% endblock %}
+{% block content %}
+<section class="section">
+  <h1>Departments</h1>
+  <div class="card-grid">
+    {% for dept in departments %}
+    <div class="card wide">
+      <h3>{{ dept.name }}</h3>
+      <p><strong>Head of Department:</strong> {{ dept.hod }}</p>
+      <p>{{ dept.description }}</p>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}
