@@ -122,7 +122,7 @@ def section_header(title: str, subtitle: str = "") -> None:
         st.caption(subtitle)
 
 
-def system_status_card(name: str, is_up: bool, palette: dict, warn: bool = False, note: str = "") -> str:
+def system_status_card(name: str, is_up: bool, palette: dict, warn: bool = False, note: str = "", url: str = "#", new_tab: bool = False) -> str:
     color = palette["orange"] if warn else (palette["green"] if is_up else palette["red"])
     label = "DEGRADED" if warn else ("ONLINE" if is_up else "OFFLINE")
     return f"""

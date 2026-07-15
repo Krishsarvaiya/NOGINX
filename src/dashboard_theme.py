@@ -85,9 +85,11 @@ html, body, [class*="css"] {{
     font-family: {FONT_STACK};
 }}
 
-/* Hide Streamlit's default chrome so this reads as an app, not a demo */
-#MainMenu, footer, header {{ visibility: hidden; height: 0; }}
-div[data-testid="stToolbar"] {{ visibility: hidden; height: 0; }}
+/* Hide Streamlit's default chrome but keep header space for the sidebar toggle */
+button[data-testid="stHeaderActionButton"] {{ display: none; }}
+#MainMenu {{ visibility: hidden; }}
+footer {{ visibility: hidden; }}
+header {{ background: transparent !important; }}
 div[data-testid="stDecoration"] {{ display: none; }}
 
 .stApp {{
@@ -98,6 +100,24 @@ div[data-testid="stDecoration"] {{ display: none; }}
 section[data-testid="stSidebar"] {{
     background: {palette["surface_alt"]};
     border-right: 1px solid {palette["border"]};
+}}
+/* Pin brand block to the top of the sidebar */
+.sidebar-brand-block {{
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 90px;
+    background: {palette["surface_alt"]};
+    z-index: 99;
+    padding-top: 12px;
+    border-bottom: 1px solid {palette["border"]};
+}}
+[data-testid="stSidebarNav"] {{
+    margin-top: 85px !important;
+}}
+[data-testid="stSidebarUserContent"] {{
+    padding-top: 0 !important;
 }}
 
 /* Generous, calm spacing instead of Streamlit's cramped default */
@@ -415,15 +435,36 @@ def inject_auth_css(palette: dict) -> str:
     transform: translateY(-2px) scale(1.01);
     box-shadow: 0 12px 32px rgba(255, 255, 255, 0.14);
 }}
-/* ...except the small in-form "Forgot password?" trigger, which reads
-   as a muted text link rather than a second primary button. */
-.st-key-auth_card div[data-testid="stFormSubmitButton"]:has(button[aria-label="Forgot password?"]) button,
-.st-key-auth_card button[aria-label="Forgot password?"] {{
+/* Style the forgot password submit button to look like a subtle, muted text link */
+.st-key-forgot_password_btn button {{
     background: transparent !important;
-    color: #9B9BA1 !important;
+    border: none !important;
+    color: #8b949e !important;
+    font-size: 0.8rem !important;
+    text-decoration: underline !important;
     box-shadow: none !important;
-    font-weight: 500 !important;
     padding: 0.5rem 0.4rem !important;
+    transform: none !important;
+}}
+.st-key-forgot_password_btn button:hover {{
+    color: #00f0ff !important;
+    background: transparent !important;
+}}
+
+/* Custom styling for password eye visibility button to avoid bright solid white shapes */
+button[data-testid="stTextInputAdornmentVisibility"] {{
+    background: rgba(255, 255, 255, 0.08) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    border-radius: 999px !important;
+    color: #c9d1d9 !important;
+    box-shadow: none !important;
+}}
+button[data-testid="stTextInputAdornmentVisibility"] svg {{
+    fill: #c9d1d9 !important;
+}}
+button[data-testid="stTextInputAdornmentVisibility"]:hover {{
+    background: rgba(255, 255, 255, 0.15) !important;
+    color: #00f0ff !important;
 }}
 
 /* Secondary text links outside the form (create account / back to sign in) */

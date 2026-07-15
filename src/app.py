@@ -67,11 +67,13 @@ _DEFAULTS = {
     "authenticated": False,
     "auth_view": "login",
     "dark_mode": True,  # Cybersecurity focused default
-    "live_monitoring": False,
+    "live_monitoring": True,  # Default to active live logs on start
     "user_email": "",
     "user_name": "",
     "user_role": "SOC_Analyst",
     "jwt_token": None,
+    "uploaded_file": None,
+    "hide_static_assets": True,
 }
 for _key, _value in _DEFAULTS.items():
     if _key not in st.session_state:
@@ -103,7 +105,7 @@ def _render_login_form():
         with rc1:
             st.checkbox("Remember me", key="login_remember")
         with rc2:
-            forgot_clicked = st.form_submit_button("Forgot password?", use_container_width=True)
+            forgot_clicked = st.form_submit_button("Forgot password?", use_container_width=True, key="forgot_password_btn")
         submitted = st.form_submit_button("Sign In", use_container_width=True, type="primary")
 
     if forgot_clicked:
@@ -238,10 +240,7 @@ def render_auth_ui(*_unused):
     )
 
 
-# Gate page access
-if not st.session_state.authenticated:
-    render_auth_ui(PALETTE)
-    st.stop()
+# Auth gate is now handled dynamically at the bottom of the file during page assembly.
 
 
 # =======================================================================
@@ -396,7 +395,8 @@ def safe_preview(df):
     return df.astype("string")
 
 
-def get_active_dataframe(uploaded=None):
+def get_active_dataframe():
+    uploaded = st.session_state.get("uploaded_file")
     if uploaded is not None:
         try:
             df = pd.read_csv(uploaded)
@@ -471,17 +471,16 @@ def _load_recent_alerts_cached(path, limit):
 def render_sidebar(palette):
     st.sidebar.markdown(
         f"""
-<div style="text-align:center; padding: 0.3rem 0 1rem 0;">
-    <div style="font-size:2rem;">🛡️</div>
-    <div style="font-weight:800; font-size:1.05rem; color:{palette['text']};">Threat Detection</div>
-    <div class="soc-muted" style="font-size:0.75rem;">SOC Dashboard · v{APP_VERSION}</div>
+<div class="sidebar-brand-block" style="text-align:center;">
+    <div style="font-size:1.45rem; font-weight:900; color:#00f0ff; letter-spacing:0.15em; margin-bottom:4px; font-family: 'Outfit', 'Inter', sans-serif; text-shadow:0 0 10px rgba(0,240,255,0.45);">NOGINX</div>
+    <div style="font-weight:700; font-size:0.75rem; color:{palette['text']}; text-transform:uppercase; letter-spacing:0.06em;">Threat Detection SOC</div>
+    <div class="soc-muted" style="font-size:0.7rem;">M.Tech Capstone Project</div>
 </div>
 """,
         unsafe_allow_html=True,
     )
 
-    st.sidebar.markdown("##### Data Source")
-    uploaded = st.sidebar.file_uploader("Upload CSV to override (optional)", type=["csv"])
+    st.sidebar.markdown("##### Configuration")
     st.sidebar.toggle(
         "Live Mode",
         key="live_monitoring",
@@ -493,15 +492,7 @@ def render_sidebar(palette):
     st.sidebar.caption(f"Live Mode is **{'ON' if st.session_state.live_monitoring else 'OFF'}**")
 
     st.sidebar.markdown("<hr class='soc-divider'/>", unsafe_allow_html=True)
-    st.sidebar.markdown("##### Appearance")
-    st.sidebar.toggle("Dark Mode", key="dark_mode")
-
-    st.sidebar.markdown("<hr class='soc-divider'/>", unsafe_allow_html=True)
-    df_for_filters, _, _ = get_active_dataframe(uploaded)
-    st.sidebar.markdown("##### Filters")
-    render_sidebar_filters(df_for_filters)
-
-    st.sidebar.markdown("<hr class='soc-divider'/>", unsafe_allow_html=True)
+    st.sidebar.caption("Active Session")
     st.sidebar.caption(f"User: **{st.session_state.user_email or 'demo user'}**")
     st.sidebar.caption(f"Role: **{st.session_state.user_role}**")
     if st.sidebar.button("Sign Out", use_container_width=True):
@@ -509,30 +500,29 @@ def render_sidebar(palette):
         st.session_state.jwt_token = None
         st.rerun()
 
-    return uploaded
 
-
-def render_sidebar_filters(df):
-    st.sidebar.checkbox(
-        "Hide Static Assets",
-        value=True,
-        key="hide_static_assets",
-    )
+def render_filters_expander(df):
+    """Renders a collapsible expander containing search & filter options on log views."""
     if df is None:
-        st.sidebar.caption("No data loaded yet.")
         return
-    if "timestamp" in df.columns:
-        min_ts = pd.to_datetime(df["timestamp"]).min()
-        max_ts = pd.to_datetime(df["timestamp"]).max()
-        if pd.notna(min_ts) and pd.notna(max_ts):
-            st.sidebar.date_input("Time range", [min_ts.date(), max_ts.date()], key="filter_date_range")
-    if "status_code" in df.columns:
-        statuses = sorted(df["status_code"].dropna().unique().astype(int).tolist())
-        st.sidebar.multiselect("Status codes", statuses, default=statuses, key="filter_status_codes")
-    if "ip" in df.columns:
-        ips = df["ip"].dropna().unique().tolist()
-        st.sidebar.selectbox("IP filter", options=["All"] + ips, key="filter_ip")
-    st.sidebar.text_input("URL contains", key="filter_url_query")
+    with st.expander("🔍 Search & Filter Settings", expanded=False):
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            st.checkbox("Hide Static Assets", value=True, key="hide_static_assets")
+            if "timestamp" in df.columns:
+                min_ts = pd.to_datetime(df["timestamp"]).min()
+                max_ts = pd.to_datetime(df["timestamp"]).max()
+                if pd.notna(min_ts) and pd.notna(max_ts):
+                    st.date_input("Time range", [min_ts.date(), max_ts.date()], key="filter_date_range")
+        with c2:
+            if "status_code" in df.columns:
+                statuses = sorted(df["status_code"].dropna().unique().astype(int).tolist())
+                st.multiselect("Status codes", statuses, default=statuses, key="filter_status_codes")
+        with c3:
+            if "ip" in df.columns:
+                ips = df["ip"].dropna().unique().tolist()
+                st.selectbox("IP filter", options=["All"] + ips, key="filter_ip")
+        st.text_input("URL contains", key="filter_url_query")
 
 
 # =======================================================================
@@ -540,17 +530,20 @@ def render_sidebar_filters(df):
 # =======================================================================
 def render_top_header(palette):
     is_live = st.session_state.get("live_monitoring", False)
-    mode_label = "🟢 LIVE" if is_live else "⚪ HISTORICAL"
+    mode_label = "[ LIVE_FEED ]" if is_live else "[ HISTORICAL_ARCHIVE ]"
     mode_color = palette["green"] if is_live else palette["graphite"]
     analyzer_label, analyzer_is_up, analyzer_warn = _ANALYZER_STATUS_DISPLAY[_analyzer_activity_status()]
     now = datetime.now()
     st.markdown(
         f"""
-<div class="soc-card soc-glass soc-header">
-    <div class="soc-brand">🛡️ Threat Detection SOC</div>
-    <div class="soc-mode-pill" style="color:{mode_color};">{mode_label}</div>
-    <div class="soc-right">
-        {status_dot(analyzer_is_up, warn=analyzer_warn)}Analyzer {analyzer_label}<br/>
+<div class="soc-card soc-glass soc-header" style="display:flex; justify-content:space-between; align-items:center; padding: 0.9rem 1.4rem; border-radius:18px;">
+    <div class="soc-brand" style="font-family: 'Outfit', 'Inter', sans-serif; font-size:1.65rem; font-weight:900; letter-spacing:-0.03em; display:flex; align-items:center; margin:0;">
+        <span style="color:#00f0ff; text-shadow:0 0 10px rgba(0,240,255,0.4); margin-right:10px;">NOGINX</span>
+        <span style="color:{palette['text_secondary']}; font-weight:300; font-size:0.95rem; border-left:1px solid {palette['border']}; padding-left:12px;">Threat Detection SOC</span>
+    </div>
+    <div class="soc-mode-pill" style="color:{mode_color}; font-weight:700; font-family: 'Fira Code', monospace; font-size:0.75rem;">{mode_label}</div>
+    <div class="soc-right" style="text-align:right; font-size:0.75rem; color:{palette['text_secondary']};">
+        {status_dot(analyzer_is_up, warn=analyzer_warn)} <span style="font-weight:600; color:{palette['text']};">Analyzer {analyzer_label}</span><br/>
         {now.strftime('%H:%M:%S')} &nbsp;·&nbsp; {now.strftime('%Y-%m-%d')} &nbsp;·&nbsp; v{APP_VERSION}
     </div>
 </div>
@@ -560,10 +553,8 @@ def render_top_header(palette):
 
 
 def render_mode_badge(is_live, source_path, palette):
-    if is_live:
-        st.success(f"🟢 **LIVE MODE**\n\nSource: `{source_path}`")
-    else:
-        st.info(f"⚪ **HISTORICAL MODE**\n\nSource: `{source_path}`")
+    mode_text = "LIVE MODE" if is_live else "HISTORICAL MODE"
+    st.info(f"💾 **SYSTEM STATUS:** Operating in `{mode_text}` | Active Data Log: `{source_path}`")
 
 
 # =======================================================================
@@ -573,7 +564,7 @@ def page_overview():
     render_top_header(PALETTE)
     
     # Live status badge
-    df, source_path, is_live = get_active_dataframe(uploaded_file)
+    df, source_path, is_live = get_active_dataframe()
     render_mode_badge(is_live, source_path, PALETTE)
     
     # 1. System Status
@@ -586,17 +577,17 @@ def page_overview():
     model_available = os.path.exists(os.path.join(MODEL_STORE_BASE_DIR, "latest.json"))
 
     items = [
-        ("Website", website_up, False, "python site/app.py"),
-        ("Live Analyzer", analyzer_is_up, analyzer_warn, f"{analyzer_label} (from alerts.log / decision_stats.json)"),
-        ("Dashboard", True, False, "this app"),
-        ("Decision Engine", decision_engine_active, not decision_engine_active, "decision_stats.json found" if decision_engine_active else "no sessions evaluated yet"),
-        ("Rule Engine", True, False, "always active, no external dependency"),
-        ("ML Model", model_available, not model_available, "trained model found" if model_available else "rules-only fallback"),
+        ("Website", website_up, False, "python site/app.py", WEBSITE_URL, True),
+        ("Live Analyzer", analyzer_is_up, analyzer_warn, f"{analyzer_label} (from alerts.log / decision_stats.json)", "/?page=live_monitoring", False),
+        ("Dashboard", True, False, "this app", "/?page=soc_dashboard", False),
+        ("Decision Engine", decision_engine_active, not decision_engine_active, "decision_stats.json found" if decision_engine_active else "no sessions evaluated yet", "/?page=soc_dashboard", False),
+        ("Rule Engine", True, False, "always active, no external dependency", "/?page=incidents_%26_alerts", False),
+        ("ML Model", model_available, not model_available, "trained model found" if model_available else "rules-only fallback", "/?page=threat_analytics", False),
     ]
     cols = st.columns(3)
-    for i, (name, up, warn, note) in enumerate(items):
+    for i, (name, up, warn, note, url, new_tab) in enumerate(items):
         with cols[i % 3]:
-            st.markdown(system_status_card(name, up, PALETTE, warn, note), unsafe_allow_html=True)
+            st.markdown(system_status_card(name, up, PALETTE, warn, note, url, new_tab), unsafe_allow_html=True)
             
     st.markdown("<hr class='soc-divider'/>", unsafe_allow_html=True)
 
@@ -674,7 +665,7 @@ def page_live_monitoring():
         path, source_label = _live_monitor_source()
         df = _read_live_monitor_df(path)
     else:
-        df, path, _ = get_active_dataframe(uploaded_file)
+        df, path, _ = get_active_dataframe()
         source_label = "Uploaded CSV" if path == "Uploaded CSV" else "Historical Dataset"
 
     section_header("Live Log Monitor", "Newest first. Real-time logging console.")
@@ -683,6 +674,9 @@ def page_live_monitoring():
     if df is None:
         st.warning(f"No data found at `{path}` yet. Browse the site to generate logs.")
         return
+
+    # Render inline search & filters
+    render_filters_expander(df)
 
     df_filter = apply_filters(df)
     if st.session_state.get("hide_static_assets", True):
@@ -707,7 +701,7 @@ def page_live_monitoring():
 # =======================================================================
 def page_analytics():
     render_top_header(PALETTE)
-    df, source_path, _ = get_active_dataframe(uploaded_file)
+    df, source_path, _ = get_active_dataframe()
     if df is None:
         st.error(f"No data found at {source_path}.")
         return
@@ -778,14 +772,14 @@ def page_alerts():
 
     c1, c2 = st.columns([2, 1])
     with c1:
-        section_header("🚨 Recent Incident Alerts")
+        section_header("Recent Incident Alerts")
         if not alerts:
             st.caption("No alerts recorded yet.")
         else:
             for alert in list(reversed(alerts))[:20]:
                 st.markdown(alert_card(alert, PALETTE), unsafe_allow_html=True)
     with c2:
-        section_header("📈 Attack Timeline")
+        section_header("Attack Timeline")
         if not alerts:
             st.caption("No attacks recorded yet.")
         else:
@@ -819,7 +813,7 @@ def page_alerts():
 # =======================================================================
 def page_scanner():
     render_top_header(PALETTE)
-    section_header("🛡️ Network Vulnerability Scanner", "Active probing & multi-source correlation")
+    section_header("Network Vulnerability Scanner", "Active probing & multi-source correlation")
 
     role = st.session_state.get("user_role", "SOC_Analyst")
     
@@ -830,10 +824,10 @@ def page_scanner():
     scan_targets = st.text_input("Scanner Target IP / Subnet Range", "192.168.1.100")
     
     if role != "Admin":
-        st.error("⛔ ACCESS DENIED: Active scanning requires elevated Admin privileges. Your current role is SOC_Analyst.")
+        st.error("ACCESS DENIED: Active scanning requires elevated Admin privileges. Your current role is SOC_Analyst.")
         st.button("Launch Vulnerability Scan", disabled=True, use_container_width=True)
     else:
-        st.warning("⚠️ Warning: Port scanning should only be run against authorized assets.")
+        st.warning("Warning: Port scanning should only be run against authorized assets.")
         if st.button("Launch Vulnerability Scan", type="primary", use_container_width=True):
             # Run scan in subprocess
             script_path = os.path.join(_REPO_ROOT, "complete_threat_detection.py")
@@ -946,12 +940,32 @@ def page_scanner():
 # =======================================================================
 def page_explorer():
     render_top_header(PALETTE)
-    df, source_path, _ = get_active_dataframe(uploaded_file)
+    
+    # Google Drive-Style Uploader Card
+    st.markdown("### Upload new logs")
+    uploaded = st.file_uploader(
+        "Drag and drop your access log CSV here to analyze", 
+        type=["csv"],
+        key="log_uploader_widget"
+    )
+    if uploaded:
+        st.session_state.uploaded_file = uploaded
+        st.success("New log file loaded successfully!")
+        
+    if st.session_state.uploaded_file is not None:
+        if st.button("Reset to System Logs", type="secondary"):
+            st.session_state.uploaded_file = None
+            st.rerun()
+
+    df, source_path, _ = get_active_dataframe()
     section_header("Data Explorer & Export", "Review raw web server access logs.")
 
     if df is None:
         st.caption(f"No data available at {source_path}.")
         return
+
+    # Render inline search & filters
+    render_filters_expander(df)
 
     st.dataframe(safe_preview(df.tail(100).iloc[::-1]), use_container_width=True)
 
@@ -982,7 +996,7 @@ def page_profile():
         st.write(f"**Access Role:** `{st.session_state.user_role}`")
         
         # Display raw JWT token details
-        st.markdown("### 🔑 Decoded JWT Authorization Token")
+        st.markdown("### Decoded JWT Authorization Token")
         token = st.session_state.get("jwt_token", "")
         if token:
             parts = token.split('.')
@@ -1000,7 +1014,7 @@ def page_profile():
                     st.json(json.loads(payload_raw))
                     
                     st.markdown("**Verification Signature:**")
-                    st.success("🔒 Signature Validated (HMAC-SHA256)")
+                    st.success("Signature Validated (HMAC-SHA256)")
             else:
                 st.error("Malformed JWT Token.")
         else:
@@ -1024,18 +1038,24 @@ def page_profile():
 # =======================================================================
 # PAGE ASSEMBLY & NAVIGATION RUNNER
 # =======================================================================
-# Render sidebar and capture uploaded file
-uploaded_file = render_sidebar(PALETTE)
+if not st.session_state.authenticated:
+    # If not logged in, render only the auth UI and completely hide the sidebar navigation
+    login_p = st.Page(render_auth_ui, title="Sign In", icon="🔒")
+    pg = st.navigation([login_p], position="hidden")
+    pg.run()
+else:
+    # Render sidebar
+    render_sidebar(PALETTE)
 
-# Define pages
-overview_p = st.Page(page_overview, title="SOC Dashboard", icon="📊")
-live_p = st.Page(page_live_monitoring, title="Live Monitoring", icon="🟢")
-analytics_p = st.Page(page_analytics, title="Threat Analytics", icon="📈")
-alerts_p = st.Page(page_alerts, title="Incidents & Alerts", icon="🚨")
-scanner_p = st.Page(page_scanner, title="Network Scanner", icon="🛡️")
-explorer_p = st.Page(page_explorer, title="Data Explorer", icon="📂")
-profile_p = st.Page(page_profile, title="Profile & Settings", icon="⚙️")
+    # Define pages
+    overview_p = st.Page(page_overview, title="SOC Dashboard", icon=":material/dashboard:")
+    live_p = st.Page(page_live_monitoring, title="Live Monitoring", icon=":material/terminal:")
+    analytics_p = st.Page(page_analytics, title="Threat Analytics", icon=":material/insights:")
+    alerts_p = st.Page(page_alerts, title="Incidents & Alerts", icon=":material/warning:")
+    scanner_p = st.Page(page_scanner, title="Network Scanner", icon=":material/shield:")
+    explorer_p = st.Page(page_explorer, title="Data Explorer", icon=":material/folder_open:")
+    profile_p = st.Page(page_profile, title="Profile & Settings", icon=":material/settings:")
 
-# Build navigation menu
-pg = st.navigation([overview_p, live_p, analytics_p, alerts_p, scanner_p, explorer_p, profile_p])
-pg.run()
+    # Build and run navigation menu
+    pg = st.navigation([overview_p, live_p, analytics_p, alerts_p, scanner_p, explorer_p, profile_p])
+    pg.run()
