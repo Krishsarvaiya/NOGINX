@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}{{ college }} — Downloads{% endblock %}
+{% block content %}
+<section class="section">
+  <h1>Downloads</h1>
+  <p>Official documents available for download.</p>
+  <ul class="download-list">
+    {% for f in files %}
+    <li>
+      <a href="/static/downloads/{{ f.filename }}" download>{{ f.name }} (PDF)</a>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endblock %}

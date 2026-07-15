@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}{{ college }} — Library{% endblock %}
+{% block content %}
+<section class="section">
+  <h1>Library Catalog</h1>
+  <p>Search the catalog by book title.</p>
+  <form class="search-form" action="/library" method="get">
+    <input type="text" name="q" placeholder="Search by title..." value="{{ query }}">
+    <button type="submit" class="btn">Search</button>
+  </form>
+
+  <table class="data-table">
+    <tr><th>Title</th><th>Author</th><th>Category</th><th>Available</th></tr>
+    {% for book in books %}
+    <tr>
+      <td>{{ book.title }}</td>
+      <td>{{ book.author }}</td>
+      <td>{{ book.category }}</td>
+      <td>{{ "Yes" if book.available else "No" }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="4">No books matched your search.</td></tr>
+    {% endfor %}
+  </table>
+</section>
+{% endblock %}

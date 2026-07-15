@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}{{ college }} — Admin Portal{% endblock %}
+{% block content %}
+<section class="section narrow">
+  <h1>Restricted Admin Area</h1>
+  <p class="notice">This portal is for authorized college staff only. Unauthorized access attempts are logged.</p>
+  <form class="login-form" action="/admin" method="post">
+    <label>Admin Username<input type="text" name="username" required></label>
+    <label>Admin Password<input type="password" name="password" required></label>
+    <button type="submit" class="btn">Log In</button>
+  </form>
+</section>
+{% endblock %}

@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}{{ college }} — Student Login{% endblock %}
+{% block content %}
+<section class="section narrow">
+  <h1>Student Login</h1>
+  {% if error %}
+  <p class="notice error">{{ error }}</p>
+  {% endif %}
+  <form class="login-form" action="/login" method="post">
+    <label>Username<input type="text" name="username" autocomplete="username" required></label>
+    <label>Password<input type="password" name="password" autocomplete="current-password" required></label>
+    <button type="submit" class="btn">Log In</button>
+  </form>
+  <p class="hint">Demo credentials: student1 / demo123</p>
+</section>
+{% endblock %}
