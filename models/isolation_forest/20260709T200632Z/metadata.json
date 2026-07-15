@@ -1,0 +1,33 @@
+{
+  "feature_names": [
+    "record_count",
+    "unique_urls",
+    "unique_methods",
+    "status_200_count",
+    "status_error_count",
+    "brute_force_count",
+    "scan_count",
+    "injection_count",
+    "dos_count",
+    "access_denial_count",
+    "normal_count",
+    "avg_confidence",
+    "xss_count",
+    "command_injection_count",
+    "directory_traversal_count",
+    "sensitive_file_count",
+    "status_403_count",
+    "status_404_count",
+    "failed_login_ratio",
+    "request_rate",
+    "burst_score",
+    "unique_query_strings",
+    "encoded_payload_count",
+    "suspicious_query_count"
+  ],
+  "contamination": 0.05,
+  "score_min": -0.1821983920570458,
+  "score_max": 0.31708857209726204,
+  "trained_at": "2026-07-09T20:06:32.477467+00:00",
+  "n_sessions_trained": 1899
+}

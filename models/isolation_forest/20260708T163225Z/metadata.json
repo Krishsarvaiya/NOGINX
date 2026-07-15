@@ -1,0 +1,21 @@
+{
+  "feature_names": [
+    "record_count",
+    "unique_urls",
+    "unique_methods",
+    "status_200_count",
+    "status_error_count",
+    "brute_force_count",
+    "scan_count",
+    "injection_count",
+    "dos_count",
+    "access_denial_count",
+    "normal_count",
+    "avg_confidence"
+  ],
+  "contamination": 0.05,
+  "score_min": -0.20298403085670724,
+  "score_max": 0.2746065927275436,
+  "trained_at": "2026-07-08T16:32:25.098339+00:00",
+  "n_sessions_trained": 1884
+}
