@@ -1,65 +1,32 @@
-.env
-/venv
-.venv
- Byte-compiled / optimized / DLL files
-__pycache__/
-*.py[codz]
-*$py.class
-
-# C extensions
-*.so
-
-# Distribution / packaging
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-share/python-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
-
-# PyInstaller
-#  Usually these files are written by a python script from a template
-#  before PyInstaller builds the exe, so as to inject date/other infos into it.
-*.manifest
-*.spec
-
-# Installer logs
-pip-log.txt
-pip-delete-this-directory.txtd a t a / f e a t u r e s . c s v 
- 
-
-# Virtual Environment
+# Virtual environments
 venv/
 .venv/
+v2/venv/
+v2/.venv/
+v1/venv/
+v1/.venv/
 
-# Python
+# Python cache
 __pycache__/
-*.py[cod]
+*.pyc
+**/*.pyc
+**/__pycache__/
 
-# Ignore only large/generated files
-data/features.csv
+# IDEs
+.vscode/
+.idea/
 
-# Ignore logs created while running
-*.log
+# Generated logs & stats
+v2/alerts.log
+v2/decision_stats.json
+v2/Project_Files/*.png
+v2/Project_Files/*.txt
+v2/data/live/*.csv
+v2/logs/
+v2/scan_results/
+v2/threat_reports/
+v2/output/
 
-# Ignore training checkpoints if needed
-*.h5
-*.pt
-
-# Keep project datasets and models
-!data/
-!data/*.csv
-!data/*.json
-!data/*.pkl
+# OS files
+Thumbs.db
+.DS_Store
