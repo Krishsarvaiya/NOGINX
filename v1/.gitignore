@@ -1,0 +1,27 @@
+.env
+
+# Virtual environments
+/venv/
+/.venv/
+
+# Python caches
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Build and packaging output
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Runtime files
+*.log
+data/*.db
+
+# Large/generated feature dumps
+data/features.csv
+
+# Training checkpoints not used by NOGINX
+*.h5
+*.pt
